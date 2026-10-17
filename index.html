@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Card Vault">
+<meta name="color-scheme" content="light">
+<title>Card Vault</title>
+<style>
+:root{--bg:#EEF1F4;--ink:#18222E;--mute:#5B6877;--line:#D3DAE2;--acc:#0B6E69;--bad:#B3261E;--card:#18222E;
+box-sizing:border-box;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}h2{font-size:17px;margin:22px 0 8px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 16px;background:var(--acc);color:#fff;min-height:44px}
+button.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
+button.bad{background:#fff;color:var(--bad);border:1px solid var(--line)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #7DB8FF;outline-offset:2px}
+input,textarea{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+textarea{min-height:120px;resize:vertical}
+label{display:block;font-size:14px;color:var(--mute);margin:10px 0 4px}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}.row>*{flex:1}
+.pv{background:var(--card);color:#F4F7FA;border-radius:18px;padding:20px;min-height:170px;display:flex;flex-direction:column;justify-content:space-between}
+.pv .n{font:600 22px/1.3 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.04em;word-break:break-all}
+.pv .m{display:flex;justify-content:space-between;gap:12px;font-size:15px}
+.pv small{display:block;color:#9FB0C2;font-size:12px}
+.ok{color:#7CE0B5}.no{color:#FFB4AB}
+.hint{font-size:14px;color:var(--mute);margin:8px 0 0}
+.item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.item b{display:block}.item .n{font-family:ui-monospace,Menlo,monospace;margin:4px 0}
+.item .row button{padding:8px 10px;min-height:40px}
+#lock{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;z-index:9}
+#lock div{max-width:340px;width:100%}
+.err{color:var(--bad);min-height:22px;margin:6px 0}
+.warn{background:#FFF3CD;border:1px solid #E8D48A;border-radius:10px;padding:10px;font-size:14px;margin-bottom:12px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="lock">
+  <div>
+    <h1>Card Vault</h1>
+    <p id="lockMsg" class="hint"></p>
+    <label for="pin">PIN (4–8 digits)</label>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="8">
+    <div id="pin2wrap" hidden>
+      <label for="pin2">Repeat PIN</label>
+      <input id="pin2" type="password" inputmode="numeric" autocomplete="off" maxlength="8">
+    </div>
+    <div id="lockErr" class="err" role="alert"></div>
+    <button id="go" style="width:100%">Unlock</button>
+  </div>
+</div>
+
+<main id="app" hidden>
+  <header><h1>Card Vault</h1><button class="alt" id="lockNow">Lock</button></header>
+  <div id="nocrypto" class="warn" hidden>Encryption isn’t available when opened this way, so data is saved without a PIN. Open the app from a secure (https) address to turn the PIN on.</div>
+
+  <div class="pv" aria-live="polite">
+    <div><small>Number</small><div class="n" id="pvN">•••• •••• •••• ••••</div><small id="pvL"></small></div>
+    <div class="m"><div><small>Name</small><span id="pvName">—</span></div><div><small>Expiry</small><span id="pvExp">—</span></div></div>
+  </div>
+
+  <h2>Scan</h2>
+  <button id="scan" style="width:100%">Scan card</button>
+  <p class="hint">Tap Scan card, then tap the box and choose <b>Scan Text</b> (the camera-text icon above the keyboard). Point the camera at the card.</p>
+  <label for="raw">Scanned text</label>
+  <textarea id="raw" placeholder="Scanned text appears here"></textarea>
+  <div class="row"><button id="fill">Read name and numbers</button><button class="alt" id="clear">Clear</button></div>
+
+  <h2>Details</h2>
+  <label for="fName">Name</label><input id="fName" autocomplete="off" autocapitalize="characters">
+  <label for="fNum">Card number</label><input id="fNum" inputmode="numeric" autocomplete="off">
+  <label for="fExp">Expiry (MM/YY)</label><input id="fExp" inputmode="numeric" autocomplete="off" maxlength="7">
+  <label for="fOther">Other codes or notes</label><input id="fOther" autocomplete="off">
+  <div class="row"><button id="save">Save card</button></div>
+
+  <h2>Saved cards</h2>
+  <div id="list"></div>
+  <div class="row"><button class="alt" id="exp">Export backup</button><button class="alt" id="impBtn">Import backup</button></div>
+  <input type="file" id="imp" accept=".json,application/json" hidden>
+  <p class="hint">Export saves a file you can keep in Files or iCloud. Backups use the same PIN encryption.</p>
+</main>
+
+<script>
+(function(){
+"use strict";
+var $=function(i){return document.getElementById(i)};
+var KEY="cardvault.v1",cards=[],cryptoKey=null,salt=null,CAN=!!(window.crypto&&crypto.subtle);
+var te=new TextEncoder(),td=new TextDecoder();
+function b64(buf){var a=new Uint8Array(buf),s="";for(var i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);return btoa(s)}
+function unb64(s){var b=atob(s),a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||"null")}catch(e){return null}}
+function store(v){try{localStorage.setItem(KEY,JSON.stringify(v))}catch(e){alert("Could not save on this device.")}}
+async function derive(pin,s){
+  var m=await crypto.subtle.importKey("raw",te.encode(pin),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt:s,iterations:200000,hash:"SHA-256"},m,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function seal(){
+  if(!CAN)return{plain:cards};
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},cryptoKey,te.encode(JSON.stringify(cards)));
+  return{salt:b64(salt),iv:b64(iv),data:b64(ct)};
+}
+async function open(v,key){
+  var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(v.iv)},key,unb64(v.data));
+  return JSON.parse(td.decode(pt));
+}
+async function persist(){store(await seal())}
+
+/* lock screen */
+var vault=load(),setup=!vault;
+function lockUI(){
+  $("lock").hidden=false;$("app").hidden=true;$("pin").value="";$("pin2").value="";$("lockErr").textContent="";
+  $("pin2wrap").hidden=!setup;
+  $("lockMsg").textContent=setup?"Create a PIN. It encrypts everything saved here. If you forget it, the data can’t be recovered.":"Enter your PIN to open.";
+  $("go").textContent=setup?"Create PIN":"Unlock";
+}
+async function unlock(){
+  var p=$("pin").value,e=$("lockErr");e.textContent="";
+  if(!/^\d{4,8}$/.test(p)){e.textContent="Use 4 to 8 digits.";return}
+  try{
+    if(setup){
+      if(p!==$("pin2").value){e.textContent="The PINs don’t match.";return}
+      salt=crypto.getRandomValues(new Uint8Array(16));cryptoKey=await derive(p,salt);cards=[];setup=false;await persist();
+    }else{
+      salt=unb64(vault.salt);cryptoKey=await derive(p,salt);cards=await open(vault,cryptoKey);
+    }
+  }catch(x){e.textContent="Wrong PIN.";return}
+  show();
+}
+function show(){$("lock").hidden=true;$("app").hidden=false;render();preview()}
+function lockNow(){cards=[];cryptoKey=null;vault=load();setup=!vault;clearForm();lockUI()}
+
+/* parsing */
+function group(d){return d.replace(/(.{4})/g,"$1 ").trim()}
+function luhn(d){var s=0,alt=false;for(var i=d.length-1;i>=0;i--){var n=+d[i];if(alt){n*=2;if(n>9)n-=9}s+=n;alt=!alt}return d.length>=13&&s%10===0}
+function parse(t){
+  var out={},m=t.match(/(?:\d[ \-]?){13,19}/);
+  if(m)out.num=m[0].replace(/\D/g,"");
+  var e=t.match(/\b(0[1-9]|1[0-2])\s*[\/\-]\s*(\d{4}|\d{2})\b/);
+  if(e)out.exp=e[1]+"/"+e[2].slice(-2);
+  var bad=/BANK|VISA|DEBIT|CREDIT|VALID|THRU|MASTERCARD|CARD|MEMBER|SINCE|GOOD|PLATINUM|GOLD|CLASSIC|SIGNATURE/i;
+  var lines=t.split(/\n/).map(function(x){return x.trim()}).filter(function(x){return /^[A-Za-z][A-Za-z.' \-]+$/.test(x)&&x.split(/\s+/).length>=2&&!bad.test(x)});
+  if(lines.length)out.name=lines[lines.length-1].toUpperCase();
+  return out;
+}
+
+/* form + preview */
+function clearForm(){["raw","fName","fNum","fExp","fOther"].forEach(function(i){$(i).value=""});preview()}
+function preview(){
+  var d=$("fNum").value.replace(/\D/g,"");
+  $("pvN").textContent=d?group(d):"•••• •••• •••• ••••";
+  var L=$("pvL");
+  if(d.length>=13){L.textContent=luhn(d)?"Number checks out":"Check the digits";L.className=luhn(d)?"ok":"no"}else{L.textContent="";L.className=""}
+  $("pvName").textContent=$("fName").value||"—";
+  $("pvExp").textContent=$("fExp").value||"—";
+}
+function fill(){
+  var r=parse($("raw").value);
+  if(!r.num&&!r.exp&&!r.name){alert("No name or numbers found. Scan again, closer and with more light.");return}
+  if(r.num)$("fNum").value=group(r.num);
+  if(r.exp)$("fExp").value=r.exp;
+  if(r.name)$("fName").value=r.name;
+  preview();
+}
+async function save(){
+  var n=$("fName").value.trim(),d=$("fNum").value.replace(/\D/g,"");
+  if(!n&&!d){alert("Add a name or a card number first.");return}
+  cards.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:n,num:d,exp:$("fExp").value.trim(),other:$("fOther").value.trim()});
+  await persist();clearForm();render();
+}
+
+/* saved list */
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function render(){
+  var L=$("list");L.textContent="";
+  if(!cards.length){L.appendChild(el("p","hint","No saved cards yet. Scan one above and tap Save card."));return}
+  cards.forEach(function(c){
+    var it=el("div","item"),shown=false;
+    it.appendChild(el("b",null,c.name||"No name"));
+    var n=el("div","n"),mask=function(){return c.num?"•••• •••• •••• "+c.num.slice(-4):"—"};
+    n.textContent=mask();it.appendChild(n);
+    it.appendChild(el("div","hint","Expiry "+(c.exp||"—")+(c.other?" · "+c.other:"")));
+    var r=el("div","row"),b1=el("button","alt","Show"),b2=el("button","alt","Copy number"),b3=el("button","bad","Delete");
+    b1.onclick=function(){shown=!shown;n.textContent=shown?(group(c.num)||"—"):mask();b1.textContent=shown?"Hide":"Show"};
+    b2.onclick=function(){
+      if(navigator.clipboard&&c.num)navigator.clipboard.writeText(c.num).then(function(){b2.textContent="Copied"},function(){b2.textContent="Copy failed"});
+    };
+    b3.onclick=async function(){if(confirm("Delete this card?")){cards=cards.filter(function(x){return x.id!==c.id});await persist();render()}};
+    r.appendChild(b1);r.appendChild(b2);r.appendChild(b3);it.appendChild(r);L.appendChild(it);
+  });
+}
+
+/* backup */
+async function exportB(){
+  if(!cards.length){alert("Nothing to export yet.");return}
+  var blob=new Blob([JSON.stringify(await seal())],{type:"application/json"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="card-vault-backup-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a);a.click();a.remove();
+}
+async function importB(f){
+  if(!f)return;
+  try{
+    var v=JSON.parse(await f.text()),list;
+    if(v.plain)list=v.plain;
+    else{var p=prompt("PIN used for this backup");if(!p)return;list=await open(v,await derive(p,unb64(v.salt)))}
+    var have={};cards.forEach(function(c){have[c.id]=1});
+    var add=list.filter(function(c){return c&&c.id&&!have[c.id]});
+    cards=cards.concat(add);await persist();render();alert("Imported "+add.length+" card"+(add.length===1?"":"s")+".");
+  }catch(e){alert("Could not read that backup. Check the PIN and the file.")}
+  $("imp").value="";
+}
+
+/* wire up */
+$("go").onclick=unlock;
+$("pin").onkeydown=$("pin2").onkeydown=function(e){if(e.key==="Enter")unlock()};
+$("lockNow").onclick=lockNow;
+$("scan").onclick=function(){$("raw").focus();$("raw").scrollIntoView({block:"center",behavior:"smooth"})};
+$("fill").onclick=fill;$("clear").onclick=clearForm;$("save").onclick=save;
+["fNum","fName","fExp"].forEach(function(i){$(i).oninput=function(){
+  if(i==="fNum"){var d=this.value.replace(/\D/g,"").slice(0,19);this.value=group(d)}
+  if(i==="fExp"){var v=this.value.replace(/[^\d]/g,"").slice(0,4);this.value=v.length>2?v.slice(0,2)+"/"+v.slice(2):v}
+  preview()}});
+$("exp").onclick=exportB;$("impBtn").onclick=function(){$("imp").click()};
+$("imp").onchange=function(){importB(this.files[0])};
+document.addEventListener("visibilitychange",function(){if(document.hidden&&CAN&&cryptoKey)lockNow()});
+
+if(!CAN){
+  $("nocrypto").hidden=false;
+  var v=load();cards=(v&&v.plain)||[];show();
+}else lockUI();
+})();
+</script>
+</body>
+</html>
